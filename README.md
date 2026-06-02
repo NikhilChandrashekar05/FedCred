@@ -1,3 +1,3 @@
 # FedCred
-FedCred is a federated learning system for privacy preserving credit risk modeling across financial institutions with differential privacy. FedCred works by incorporating three simulated banks that collaboratively train a shared credit scoring model without sending customer data to each other. 
+FedCred is a federated learning system for privacy preserving credit risk modeling across financial institutions using differential privacy. FedCred works by incorporating three simulated banks that collaboratively train a shared credit scoring model without sending customer data to each other. 
 Each bank trains locally on its own data of borrowers. Only gradient updates, the mathematical signal for how the model should improve is what leaves each bank's server. A central aggregator averages those signals using FedAvg and sends back an improved global model, this process repeats while no raw data ever leaves any bank.
