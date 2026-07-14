@@ -42,8 +42,15 @@ class CreditClient(fl.client.NumPyClient):
         input_dim = X_train.shape[1]
 
         self.model = CreditScoringModel(input_dim)
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
-        self.criterion = nn.BCELoss()
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.0005)
+
+          # calculate class imbalance ratio for this bank
+        num_pos = (y_train_tensor == 1).sum()
+        num_neg = (y_train_tensor == 0).sum()
+        pos_weight = torch.tensor([num_neg / num_pos], dtype=torch.float32)
+        # BCEWithLogitsLoss combines sigmoid + loss in one step
+        # pos_weight makes the model penalize missing a default more than missing a payback
+        self.criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     def get_parameters(self, config):
         # state_dict() returns every weight and bias in the model as a dictionary
@@ -70,12 +77,14 @@ class CreditClient(fl.client.NumPyClient):
 
         # train the model locally for one epoch on this bank's data
         self.model.train()
-        for X_batch, y_batch in train_loader:
-            self.optimizer.zero_grad()
-            predictions = self.model(X_batch)
-            loss = self.criterion(predictions, y_batch)
-            loss.backward()
-            self.optimizer.step()
+         # train for 3 epochs per round instead of 1
+        for epoch in range(3):
+            for X_batch, y_batch in train_loader:
+                self.optimizer.zero_grad()
+                predictions = self.model(X_batch)
+                loss = self.criterion(predictions, y_batch)
+                loss.backward()
+                self.optimizer.step()
 
         # return updated weights, number of training samples, and metrics
         return self.get_parameters(config={}), len(X_train), {}
@@ -88,11 +97,20 @@ class CreditClient(fl.client.NumPyClient):
         self.model.eval()
 
         with torch.no_grad():
-            predictions = self.model(X_test_tensor)
-            loss = self.criterion(predictions, y_test_tensor).item()
+            # model now outputs raw scores, not probabilities
+            raw_output = self.model(X_test_tensor)
+            loss = self.criterion(raw_output, y_test_tensor).item()
+
+            # manually apply sigmoid to convert raw scores to probabilities
+            predictions = torch.sigmoid(raw_output)
 
             # convert probabilities to binary predictions using 0.5 threshold
             predicted_labels = (predictions >= 0.5).float()
+
+            # debug — check model is predicting both classes not just majority
+            unique, counts = torch.unique(predicted_labels, return_counts=True)
+            print(f"Bank {BANK_ID} predicted label distribution: {dict(zip(unique.tolist(), counts.tolist()))}")
+
             accuracy = (predicted_labels == y_test_tensor).float().mean().item()
 
         return loss, len(X_test), {"accuracy": accuracy}

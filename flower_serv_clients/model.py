@@ -10,7 +10,7 @@ class CreditScoringModel(nn.Module):
         #.Sequential stacks layers in order data flows top to bottom
         self.network = nn.Sequential(
             nn.Linear(input_dim, 64), nn.ReLU(), nn.Linear(64,32),
-            nn.ReLU(), nn.Linear(32, 1), nn.Sigmoid() 
+            nn.ReLU(), nn.Linear(32, 1)
         )
         #Model starts pattern learning from turing 16->64 values 
         #nn ReLU() takes negative value sets to 0 and keeps positive values same
