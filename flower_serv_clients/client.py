@@ -55,7 +55,7 @@ class CreditClient(fl.client.NumPyClient):
 
         # set epsilon level for this run — change this to 1, 5, 10, or float('inf')
         # float('inf') = no privacy, standard training
-        self.epsilon = 10
+        self.epsilon = float('inf')
 
 
     def get_parameters(self, config):
@@ -76,6 +76,12 @@ class CreditClient(fl.client.NumPyClient):
         # actually load these weights into the model
         # strict=True throws an error if shapes don't match — catches bugs early
         self.model.load_state_dict(state_dict, strict=True)
+
+        # save model weights after every round — last save = final global model
+        torch.save(
+        self.model.state_dict(),
+        os.path.join(os.path.dirname(__file__), 'global_model.pth')
+    )
 
     def fit(self, parameters, config):
         # load the global model weights sent from the server
