@@ -8,6 +8,7 @@ import pandas as pd
 import torch.nn as nn
 import numpy as np
 from model import CreditScoringModel
+from privacy import get_privacy_settings, train_with_privacy
 #flwr is the federated learning framework, which handles comms between client and server, 
 # flower handles sending gradients to server or receive an updated Model
 
@@ -44,13 +45,18 @@ class CreditClient(fl.client.NumPyClient):
         self.model = CreditScoringModel(input_dim)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.0005)
 
-          # calculate class imbalance ratio for this bank
+        # calculate class imbalance ratio for this bank
         num_pos = (y_train_tensor == 1).sum()
         num_neg = (y_train_tensor == 0).sum()
         pos_weight = torch.tensor([num_neg / num_pos], dtype=torch.float32)
         # BCEWithLogitsLoss combines sigmoid + loss in one step
         # pos_weight makes the model penalize missing a default more than missing a payback
         self.criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
+        # set epsilon level for this run — change this to 1, 5, 10, or float('inf')
+        # float('inf') = no privacy, standard training
+        self.epsilon = 10
+
 
     def get_parameters(self, config):
         # state_dict() returns every weight and bias in the model as a dictionary
@@ -75,18 +81,32 @@ class CreditClient(fl.client.NumPyClient):
         # load the global model weights sent from the server
         self.set_parameters(parameters)
 
-        # train the model locally for one epoch on this bank's data
-        self.model.train()
-         # train for 3 epochs per round instead of 1
-        for epoch in range(3):
-            for X_batch, y_batch in train_loader:
-                self.optimizer.zero_grad()
-                predictions = self.model(X_batch)
-                loss = self.criterion(predictions, y_batch)
-                loss.backward()
-                self.optimizer.step()
+        # check if differential privacy is enabled for this run
+        privacy_settings = get_privacy_settings(self.epsilon)
 
-        # return updated weights, number of training samples, and metrics
+        if privacy_settings is not None:
+            # DP training — Opacus handles gradient clipping and noise injection
+            print(f"  Bank {BANK_ID} training with DP (ε={self.epsilon})")
+            self.model, actual_epsilon = train_with_privacy(
+                model=self.model,
+                optimizer=self.optimizer,
+                data_loader=train_loader,
+                criterion=self.criterion,
+                epsilon=privacy_settings['target_epsilon'],
+                max_grad_norm=privacy_settings['max_grad_norm'],
+                epochs=privacy_settings['epochs'],
+        )
+        else:
+            # standard training — no privacy, baseline run
+            self.model.train()
+            for epoch in range(3):
+                for X_batch, y_batch in train_loader:
+                    self.optimizer.zero_grad()
+                    predictions = self.model(X_batch)
+                    loss = self.criterion(predictions, y_batch)
+                    loss.backward()
+                    self.optimizer.step()
+
         return self.get_parameters(config={}), len(X_train), {}
     
     def evaluate(self, parameters, config):
