@@ -57,7 +57,7 @@ export default function TrainingDashboard() {
 }
 
 const styles = {
-  card: { background: '#12122a', borderRadius: 12, padding: 24, marginBottom: 24, border: '1px solid #2a2a3e' },
+  card: { background: '#141435', borderRadius: 12, padding: 24, marginBottom: 24, border: '1px solid #2a2a3e' },
   title: { color: '#fff', fontSize: 18, fontWeight: 700, marginBottom: 16 },
   statusRow: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 },
   badge: { padding: '4px 12px', borderRadius: 20, color: '#fff', fontSize: 12, fontWeight: 700 },

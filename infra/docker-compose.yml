@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+
+  fl_server:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.server
+    ports:
+      - "8080:8080"
+      - "8000:8000"
+    volumes:
+      - ../api/fedcredit.db:/app/api/fedcredit.db
+    networks:
+      - fednet
+
+  bank_a:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.client
+    environment:
+      - BANK_ID=a
+      - SERVER_ADDRESS=fl_server:8080
+    depends_on:
+      - fl_server
+    networks:
+      - fednet
+
+  bank_b:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.client
+    environment:
+      - BANK_ID=b
+      - SERVER_ADDRESS=fl_server:8080
+    depends_on:
+      - fl_server
+    networks:
+      - fednet
+
+  bank_c:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.client
+    environment:
+      - BANK_ID=c
+      - SERVER_ADDRESS=fl_server:8080
+    depends_on:
+      - fl_server
+    networks:
+      - fednet
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    depends_on:
+      - fl_server
+    networks:
+      - fednet
+
+networks:
+  fednet:
+    driver: bridge

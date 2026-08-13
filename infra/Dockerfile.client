@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir flwr torch pandas pyarrow scikit-learn opacus
+
+# copy the FL client code and data
+COPY flower_serv_clients/ ./flower_serv_clients/
+COPY Data/processed/ ./Data/processed/
+
+# BANK_ID env var selects which bank this container represents
+ENV BANK_ID=a
+
+CMD ["python", "flower_serv_clients/client.py"]

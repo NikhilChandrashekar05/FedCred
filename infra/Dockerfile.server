@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# install dependencies
+RUN pip install --no-cache-dir flwr fastapi uvicorn torch pandas pyarrow scikit-learn
+
+# copy server code and API
+COPY flower_serv_clients/ ./flower_serv_clients/
+COPY api/ ./api/
+
+# start the Flower server
+CMD ["python", "flower_serv_clients/server.py"]
