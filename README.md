@@ -57,7 +57,7 @@ graph TD
     SPLIT --> BC --> SCALE
     SCALE --> OUT
 ```
-* A MinMaxScaler is fit on each bank's training data only, then applied to that bank's test data. Fitting on the test set would leak information about future data into preprocessing, the scaler would know min/max values it shouldn't have access to. Each bank gets its own scaler, saved to disk so the same transformation can be applied to new loan applications at inference time.
+ A MinMaxScaler is fit on each bank's training data only, then applied to that bank's test data. Fitting on the test set would leak information about future data into preprocessing, the scaler would know min/max values it shouldn't have access to. Each bank gets its own scaler, saved to disk so the same transformation can be applied to new loan applications at inference time.
 
 Each bank ends up with four parquet files (X_train, X_test, y_train, y_test) and a pickled scaler. Nothing crosses between banks.
 
@@ -126,7 +126,7 @@ The 3 banks used are split by loan grade, giving each a realistic different borr
 | Bank A | A, B | 592,053 | 10.3% |
 | Bank B | C, D | 546,457 | 24.7% |
 | Bank C | E, F, G | 127,199 | 40.5% |
-
+--
 This is where FedAvg comes into play, because of the differences in each Bank's gradients FedAvg has to reconcile them into a model that works for all three. 
 ---
 
@@ -149,7 +149,7 @@ Privacy is parameterized by epsilon (ε). A lower ε correlates to more noise wh
 | 10 | moderate | ~4.3 hrs | per-sample gradients are expensive |
 | 5 | strong | ~6 hrs | per-sample gradients more expensive than ε=10 |
 | 1 | strongest | 10.6 hrs | per-sample gradients more expensive than ε=10 and ε=5 |
-
+--
 The per sample gradient computation is and gets more expensive than batch gradients. Lower epsilon means more noise to gradients, stronger privacy and lower accuracy. While higher epsilon means less to no noise at all, little to no privacy, and better accuracy. The noise corrupts the learning signal so no one can reverse engineer people's data from the gradients but that effect also makes the model work harder to learn real patterns. 
 ---
 
