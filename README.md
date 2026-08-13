@@ -6,7 +6,7 @@ Each bank trains locally on its own data of borrowers. Only gradient updates, th
 Since banks need data to build efficient credit models, when the data becomes abundant efficiency of the model needs to be maintained with better fraud detection and fewer missed defaults. But the best data is locked inside competitors. A combined model from 2 different banks that have >50 million customers each would be more powerful to catching patterns that neither can see alone. But the data cannot be combined due to federal regulations such as GLBA which prevents sharing non public personal financial data. Regulators would also never approve a data sharing contract between competing financial institutions. 
 
 ## Solution
-Utilizing the concept of federated learning allows for the the model itself to be moved to the data instead of the data being moved to a central server. Each bank trains locally on its own customers and only the gradient gets updated.The gradient is the mathematical signal for how the model weights should shift to which it travels back to the central aggregator.
+Utilizing the concept of federated learning allows for the model itself to be moved to the data instead of the data being moved to a central server. Each bank trains locally on its own customers and only the gradient gets updated. The gradient is the mathematical signal for how the model weights should shift to which it travels back to the central aggregator.
 
 ## Architecture
  
@@ -33,6 +33,63 @@ graph TD
     DB --> API
     API --> UI
 ```
+## Data Pipeline
+
+```mermaid
+graph TD
+    RAW[Raw CSV<br/> 151 columns <br/> 2.2M rows]
+    FILTER[Filter target<br/> keep only resolved loans]
+    SELECT[Select 16 features<br/> drop leakage columns]
+    CLEAN[Clean formats <br/>emp_length, home_ownership]
+    NULLS[Drop incomplete rows]
+    SPLIT[Split by loan grade]
+ 
+    BA[Bank A<br/> 592k rows]
+    BB[Bank B<br/> 546k rows]
+    BC[Bank C<br/> 127k rows]
+ 
+    SCALE[MinMax scale<br/> fit on train only]
+    OUT[Parquet files<br/> + saved scalers]
+ 
+    RAW --> FILTER --> SELECT --> CLEAN --> NULLS --> SPLIT
+    SPLIT --> BA --> SCALE
+    SPLIT --> BB --> SCALE
+    SPLIT --> BC --> SCALE
+    SCALE --> OUT
+```
+* A MinMaxScaler is fit on each bank's training data only, then applied to that bank's test data. Fitting on the test set would leak information about future data into preprocessing, the scaler would know min/max values it shouldn't have access to. Each bank gets its own scaler, saved to disk so the same transformation can be applied to new loan applications at inference time.
+
+Each bank ends up with four parquet files (X_train, X_test, y_train, y_test) and a pickled scaler. Nothing crosses between banks.
+
+
+
+
+## Feature Selection
+ 
+Out of 151 raw columns, 16 made it into the model. Selected based off, is this available when the loan application is submitted? And is enough of it actually populated?
+ 
+| Feature | What it tells the model |
+|---|---|
+| `loan_amnt` | Size of the request |
+| `int_rate` | Rate the borrower was offered |
+| `installment` | Monthly payment burden |
+| `annual_inc` | Income available to service the debt |
+| `dti` | Debt-to-income ratio |
+| `fico_range_low` | Credit score, lower bound |
+| `fico_range_high` | Credit score, upper bound |
+| `inq_last_6mths` | Recent credit-seeking behavior |
+| `open_acc` | Number of active credit lines |
+| `pub_rec` | Derogatory public records |
+| `revol_bal` | Revolving balance carried |
+| `revol_util` | How much available credit is being used |
+| `total_acc` | Total credit history depth |
+| `delinq_2yrs` | Recent payment failures |
+| `emp_length` | Employment stability |
+| `home_ownership` | Rent / mortgage / own |
+
+
+
+
 ### One Federated Round
  
 ```mermaid
@@ -60,7 +117,7 @@ sequenceDiagram
 ```
  
 ---
-Data for each borrower can be different. Utilizing the concept of IID ( Independent and identically distributed) which is the assumption in ML that every piece of your data looks statistically like every other piece in a opposite way meaning Non-IID focuses on breaking that notion. Each client's data comes from a different distribution. For example a local credit union's borrowers will differ from a national card issuer's. 
+Data for each borrower can be different. Utilizing the concept of IID ( Independent and identically distributed) which is the assumption in ML that every piece of your data looks statistically like every other piece, in a opposite way meaning Non-IID focuses on breaking that notion. Each client's data comes from a different distribution. For example a local credit union's borrowers will differ from a national card issuer's. 
 
 The 3 banks used are split by loan grade, giving each a realistic different borrower population to mimic the situation real banks are in. 
 
@@ -75,7 +132,7 @@ This is where FedAvg comes into play, because of the differences in each Bank's 
 
 ## Privacy Layer
 
-Gradient updates by themselves can in used to reconstruct training data in theory. Using Opacus to maintain differential privacy prevents this by clipping per sample gradients and placing calibrated Gaussian noise before anything leaves the client. 
+Gradient updates can be used to reconstruct training data in theory. Using Opacus to maintain differential privacy prevents this by clipping per sample gradients and placing calibrated Gaussian noise before anything leaves the client. 
 
 ```mermaid
 graph LR
@@ -84,16 +141,16 @@ graph LR
     C --> N[Add Gaussian<br/>noise]
     N --> O[Optimizer step]
 ```
-Privacy is parameterized by epsilon (ε). The lower ε is correlates to more noise which is stronger privacy and lower accuracy. The privacy and utility tradeoff is a case that is measurable as shown below: 
+Privacy is parameterized by epsilon (ε). A lower ε correlates to more noise which is stronger privacy and lower accuracy. The privacy and utility tradeoff is a case that is measurable as shown below: 
 
 | ε | Privacy | Training Time | Notes |
 |---|---|---|---|
 | ∞ | none (baseline) | ~11 min | no noise added |
 | 10 | moderate | ~4.3 hrs | per-sample gradients are expensive |
 | 5 | strong | ~6 hrs | per-sample gradients more expensive than ε=10 |
-| 1 | strongest | 10.6 hrs | per-sample gradients more expensive than ε=10 and ε=5 and therefore would not be utilized |
+| 1 | strongest | 10.6 hrs | per-sample gradients more expensive than ε=10 and ε=5 |
 
-The per sample gradient computation is and gets more expensive than batch gradients.
+The per sample gradient computation is and gets more expensive than batch gradients. Lower epsilon means more noise to gradients, stronger privacy and lower accuracy. While higher epsilon means less to no noise at all, little to no privacy, and better accuracy. The noise corrupts the learning signal so no one can reverse engineer people's data from the gradients but that effect also makes the model work harder to learn real patterns. 
 ---
 
 ## Tech Stack
